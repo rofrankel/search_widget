@@ -123,6 +123,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.4.0"
+  portal:
+    dependency: "direct main"
+    description:
+      name: portal
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.0.0+3"
   quiver:
     dependency: transitive
     description:
@@ -136,7 +143,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "1.0.1"
+    version: "1.0.2"
   sky_engine:
     dependency: transitive
     description: flutter

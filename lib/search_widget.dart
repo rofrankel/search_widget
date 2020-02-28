@@ -1,7 +1,9 @@
 library search_widget;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
+import 'package:portal/portal.dart';
 
 import 'widget/no_item_found.dart';
 
@@ -21,7 +23,7 @@ typedef TextFieldBuilder = Widget Function(
 );
 
 class SearchWidget<T> extends StatefulWidget {
-  const SearchWidget({
+  SearchWidget({
     @required this.dataList,
     @required this.popupListItemBuilder,
     @required this.selectedItemBuilder,
@@ -32,7 +34,8 @@ class SearchWidget<T> extends StatefulWidget {
     this.listContainerHeight,
     this.noItemsFoundWidget,
     this.textFieldBuilder,
-  }) : super(key: key);
+  })  : portalKey = ValueKey('$key|portal'),
+        super(key: key);
 
   final List<T> dataList;
   final QueryListItemBuilder<T> popupListItemBuilder;
@@ -42,6 +45,7 @@ class SearchWidget<T> extends StatefulWidget {
   final QueryBuilder<T> queryBuilder;
   final TextFieldBuilder textFieldBuilder;
   final Widget noItemsFoundWidget;
+  final Key portalKey;
 
   final OnItemSelected<T> onItemSelected;
 
@@ -59,11 +63,13 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
   bool isRequiredCheckFailed;
   Widget textField;
   OverlayEntry overlayEntry;
+  ReactPortal portal;
   bool showTextBox = false;
   double listContainerHeight;
   final LayerLink _layerLink = LayerLink();
   final double textBoxHeight = 48;
   final TextEditingController textController = TextEditingController();
+  bool needsRemoveOverlayAndPortal = false;
 
   @override
   void initState() {
@@ -72,26 +78,37 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
   }
 
   void init() {
+    if (needsRemoveOverlayAndPortal) {
+      removeOverlayAndPortal();
+    }
     _tempList = <T>[];
     notifier = ValueNotifier(null);
-    _focusNode = FocusNode();
+    _focusNode = FocusNode(onKey: (node, event) {
+      setState(() {
+        if (event.logicalKey == LogicalKeyboardKey.escape) {
+          removeOverlayAndPortal();
+        }
+      });
+      return true;
+    });
     isFocused = false;
     _list = List<T>.from(widget.dataList);
     _tempList.addAll(_list);
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) {
         _controller.clear();
-        if (overlayEntry != null) {
-          overlayEntry.remove();
-        }
-        overlayEntry = null;
+        // This is the bug?
+        // Can we mark this to be removed on mouse up???
+        debugPrint('oh hi');
+        needsRemoveOverlayAndPortal = true;
+        // removeOverlayAndPortal();
       } else {
         _tempList
           ..clear()
           ..addAll(_list);
-        if (overlayEntry == null) {
+        if (overlayEntry == null && portal == null) {
           onTap();
-        } else {
+        } else if (overlayEntry != null) {
           overlayEntry.markNeedsBuild();
         }
       }
@@ -183,10 +200,7 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
         if (widget.hideSearchBoxWhenItemSelected && notifier.value != null)
           const SizedBox(height: 0)
         else
-          CompositedTransformTarget(
-            link: _layerLink,
-            child: textField,
-          ),
+          CompositedTransformTarget(link: _layerLink, child: textField),
         if (notifier.value != null)
           Container(
             decoration: BoxDecoration(
@@ -205,10 +219,7 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
   }
 
   void onDropDownItemTap(T item) {
-    if (overlayEntry != null) {
-      overlayEntry.remove();
-    }
-    overlayEntry = null;
+    removeOverlayAndPortal();
     _controller.clear();
     _focusNode.unfocus();
     setState(() {
@@ -220,6 +231,56 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
       widget.onItemSelected(item);
     }
   }
+
+  Widget getOverlayContents() => RawKeyboardListener(
+        autofocus: true,
+        focusNode: _focusNode,
+        onKey: (event) => setState(() {
+          if (event.logicalKey == LogicalKeyboardKey.escape) {
+            removeOverlayAndPortal();
+          }
+        }),
+        child: GestureDetector(
+          onTap: removeOverlayAndPortal,
+          child: Container(
+            height: listContainerHeight,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            child: Card(
+              color: Colors.white,
+              elevation: 5,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(4)),
+              ),
+              child: _tempList.isNotEmpty
+                  ? Scrollbar(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        separatorBuilder: (context, index) => const Divider(
+                          height: 1,
+                        ),
+                        itemBuilder: (context, index) => Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              return onDropDownItemTap(_tempList[index]);
+                            },
+                            child: widget.popupListItemBuilder(
+                              _tempList.elementAt(index),
+                            ),
+                          ),
+                        ),
+                        itemCount: _tempList.length,
+                      ),
+                    )
+                  : widget.noItemsFoundWidget != null
+                      ? Center(
+                          child: widget.noItemsFoundWidget,
+                        )
+                      : const NoItemFound(),
+            ),
+          ),
+        ),
+      );
 
   void onTap() {
     final RenderBox textFieldRenderBox = context.findRenderObject();
@@ -238,61 +299,48 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
       ),
       Offset.zero & overlay.size,
     );
-    overlayEntry = OverlayEntry(
+
+    portal ??= ReactPortal(
+      key: widget.portalKey,
       builder: (context) {
         final height = MediaQuery.of(context).size.height;
-        return Positioned(
-          left: position.left,
+        return Container(
           width: width,
-          child: CompositedTransformFollower(
+          child: Transform.translate(
             offset: Offset(
-              0,
+              position.left,
               height - position.bottom < listContainerHeight
                   ? (textBoxHeight + 6.0)
                   : -(listContainerHeight - 8.0),
             ),
-            showWhenUnlinked: false,
-            link: _layerLink,
-            child: Container(
-              height: listContainerHeight,
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              child: Card(
-                color: Colors.white,
-                elevation: 5,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(4)),
-                ),
-                child: _tempList.isNotEmpty
-                    ? Scrollbar(
-                        child: ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          separatorBuilder: (context, index) => const Divider(
-                            height: 1,
-                          ),
-                          itemBuilder: (context, index) => Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => onDropDownItemTap(_tempList[index]),
-                              child: widget.popupListItemBuilder(
-                                _tempList.elementAt(index),
-                              ),
-                            ),
-                          ),
-                          itemCount: _tempList.length,
-                        ),
-                      )
-                    : widget.noItemsFoundWidget != null
-                        ? Center(
-                            child: widget.noItemsFoundWidget,
-                          )
-                        : const NoItemFound(),
-              ),
-            ),
+            child: getOverlayContents(),
           ),
+          // child: getOverlayContents(),
         );
       },
-    );
-    Overlay.of(context).insert(overlayEntry);
+    )..show(context);
+
+    // overlayEntry = OverlayEntry(
+    //   builder: (context) {
+    //     final height = MediaQuery.of(context).size.height;
+    //     return Positioned(
+    //       left: position.left,
+    //       width: width,
+    //       child: CompositedTransformFollower(
+    //         offset: Offset(
+    //           0,
+    //           height - position.bottom < listContainerHeight
+    //               ? (textBoxHeight + 6.0)
+    //               : -(listContainerHeight - 8.0),
+    //         ),
+    //         showWhenUnlinked: false,
+    //         link: _layerLink,
+    //         child: getOverlayContents(),
+    //       ),
+    //     );
+    //   },
+    // );
+    // Overlay.of(context).insert(overlayEntry);
   }
 
   void onDeleteSelectedItem() {
@@ -302,12 +350,21 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
     }
   }
 
-  @override
-  void dispose() {
+  void removeOverlayAndPortal() {
+    needsRemoveOverlayAndPortal = false;
     if (overlayEntry != null) {
       overlayEntry.remove();
     }
     overlayEntry = null;
+    if (portal != null) {
+      PortalProvider.of(context).removeKey(widget.portalKey);
+    }
+    portal = null;
+  }
+
+  @override
+  void dispose() {
+    removeOverlayAndPortal();
     super.dispose();
   }
 }

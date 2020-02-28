@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:portal/portal.dart';
 import 'package:search_widget/search_widget.dart';
 
 // Sets a platform override for desktop to avoid exceptions. See
@@ -14,6 +16,7 @@ void enablePlatformOverrideForDesktop() {
 }
 
 void main() {
+  debugPaintPointersEnabled = true;
   enablePlatformOverrideForDesktop();
   runApp(MyApp());
 }
@@ -21,13 +24,15 @@ void main() {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Search Widget',
-      theme: ThemeData(
-        primarySwatch: Colors.blueGrey,
+    return PortalProvider(
+      child: MaterialApp(
+        title: 'Search Widget',
+        theme: ThemeData(
+          primarySwatch: Colors.blueGrey,
+        ),
+        debugShowCheckedModeBanner: false,
+        home: HomePage(),
       ),
-      debugShowCheckedModeBanner: false,
-      home: HomePage(),
     );
   }
 }
