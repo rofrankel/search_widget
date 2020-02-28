@@ -80,11 +80,10 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
     _tempList.addAll(_list);
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) {
-        _controller.clear();
-        if (overlayEntry != null) {
-          overlayEntry.remove();
-        }
-        overlayEntry = null;
+        Future.delayed(const Duration(milliseconds: 100)).then((value) {
+          _controller.clear();
+          removeOverlay();
+        });
       } else {
         _tempList
           ..clear()
@@ -205,12 +204,9 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
   }
 
   void onDropDownItemTap(T item) {
-    if (overlayEntry != null) {
-      overlayEntry.remove();
-    }
-    overlayEntry = null;
     _controller.clear();
     _focusNode.unfocus();
+    removeOverlay();
     setState(() {
       notifier.value = item;
       isFocused = false;
@@ -225,6 +221,8 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
     final RenderBox textFieldRenderBox = context.findRenderObject();
     final RenderBox overlay = Overlay.of(context).context.findRenderObject();
     final width = textFieldRenderBox.size.width;
+    final offset =
+        textFieldRenderBox.localToGlobal(Offset.zero, ancestor: overlay);
     final position = RelativeRect.fromRect(
       Rect.fromPoints(
         textFieldRenderBox.localToGlobal(
@@ -243,52 +241,56 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
         final height = MediaQuery.of(context).size.height;
         return Positioned(
           left: position.left,
-          width: width,
-          child: CompositedTransformFollower(
-            offset: Offset(
-              0,
-              height - position.bottom < listContainerHeight
+          top: offset.dy +
+              (height - position.bottom < listContainerHeight
                   ? (textBoxHeight + 6.0)
-                  : -(listContainerHeight - 8.0),
-            ),
-            showWhenUnlinked: false,
-            link: _layerLink,
-            child: Container(
-              height: listContainerHeight,
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              child: Card(
-                color: Colors.white,
-                elevation: 5,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(4)),
-                ),
-                child: _tempList.isNotEmpty
-                    ? Scrollbar(
-                        child: ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          separatorBuilder: (context, index) => const Divider(
-                            height: 1,
-                          ),
-                          itemBuilder: (context, index) => Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => onDropDownItemTap(_tempList[index]),
-                              child: widget.popupListItemBuilder(
-                                _tempList.elementAt(index),
-                              ),
+                  : -(listContainerHeight - 8.0)),
+          width: width,
+          // child: CompositedTransformFollower(
+          //   offset: Offset(
+          //     0,
+          //     height - position.bottom < listContainerHeight
+          //         ? (textBoxHeight + 6.0)
+          //         : -(listContainerHeight - 8.0),
+          //   ),
+          //   showWhenUnlinked: false,
+          //   link: _layerLink,
+          child: Container(
+            height: listContainerHeight,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            child: Card(
+              color: Colors.white,
+              elevation: 5,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(4)),
+              ),
+              child: _tempList.isNotEmpty
+                  ? Scrollbar(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        separatorBuilder: (context, index) => const Divider(
+                          height: 1,
+                        ),
+                        itemBuilder: (context, index) => Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => onDropDownItemTap(_tempList[index]),
+                            child: widget.popupListItemBuilder(
+                              _tempList.elementAt(index),
                             ),
                           ),
-                          itemCount: _tempList.length,
                         ),
-                      )
-                    : widget.noItemsFoundWidget != null
-                        ? Center(
-                            child: widget.noItemsFoundWidget,
-                          )
-                        : const NoItemFound(),
-              ),
+                        itemCount: _tempList.length,
+                      ),
+                    )
+                  : widget.noItemsFoundWidget != null
+                      ? Center(
+                          child: widget.noItemsFoundWidget,
+                        )
+                      : const NoItemFound(),
             ),
           ),
+          // ),
         );
       },
     );
@@ -304,10 +306,14 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
 
   @override
   void dispose() {
+    removeOverlay();
+    super.dispose();
+  }
+
+  void removeOverlay() {
     if (overlayEntry != null) {
       overlayEntry.remove();
     }
     overlayEntry = null;
-    super.dispose();
   }
 }
