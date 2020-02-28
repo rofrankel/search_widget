@@ -309,9 +309,10 @@ class MySingleChoiceSearchState<T> extends State<SearchWidget<T>> {
           child: Transform.translate(
             offset: Offset(
               position.left,
-              height - position.bottom < listContainerHeight
-                  ? (textBoxHeight + 6.0)
-                  : -(listContainerHeight - 8.0),
+              textBoxHeight + 6.0,
+              // height - position.bottom < listContainerHeight
+              //     ? (textBoxHeight + 6.0)
+              //     : -(listContainerHeight - 8.0),
             ),
             child: getOverlayContents(),
           ),
